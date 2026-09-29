@@ -1,4 +1,5 @@
 name: npm OIDC smoke test
+run-name: 'npm OIDC smoke: ${{ inputs.cli_ref }} for ${{ inputs.package }}'
 
 on:
   workflow_dispatch:
