@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 20
     env:
       EXPECTED_NPM_USER: ${{ inputs.expected_npm_user }}
-      FIXTURE_DIR: ${{ runner.temp }}/npm-oidc-fixture
+      FIXTURE_DIR: ${{ github.workspace }}/.tmp/npm-oidc-fixture
       NPM_CLI: ${{ github.workspace }}/.tmp/npm-cli/bin/npm-cli.js
       OPERATION: publish
       PACKAGE_NAME: ${{ inputs.package }}
