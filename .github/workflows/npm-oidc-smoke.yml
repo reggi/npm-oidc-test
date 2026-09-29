@@ -45,7 +45,6 @@ jobs:
 
   dist-tag-list:
     needs: dist-tag-add
-    if: always()
     uses: ./.github/workflows/npm-dist-tag.yml
     with:
       action: list
@@ -56,7 +55,6 @@ jobs:
 
   dist-tag-remove:
     needs: dist-tag-list
-    if: always()
     uses: ./.github/workflows/npm-dist-tag.yml
     with:
       action: remove

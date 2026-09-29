@@ -80,7 +80,7 @@ The version defaults to `1.0.0` when omitted. Set `GITHUB_REPOSITORY=owner/repos
 
 The final `report` job writes a GitHub Actions job summary with the result of every command and fails unless all five command checks succeeded.
 
-Independent checks continue after a failure so the report remains complete. Stage publish runs independently from normal publish, and dist-tag list and remove still run when dist-tag add fails. Dist-tag add only runs after publish succeeds because it needs the newly published version.
+The dist-tag sequence stops after its first failure, so list and remove are skipped when add fails. Stage publish runs independently and continues even when publish or a dist-tag operation fails. Dist-tag add only runs after publish succeeds because it needs the newly published version.
 
 You can trigger and follow the smoke test from GitHub CLI:
 
