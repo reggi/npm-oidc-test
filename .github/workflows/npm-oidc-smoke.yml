@@ -1,0 +1,118 @@
+name: npm OIDC smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Existing public npm package with this trusted publisher configured
+        required: true
+        type: string
+      cli_ref:
+        description: npm/cli branch, tag, or commit SHA
+        required: true
+        type: string
+        default: latest
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-oidc-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/npm-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      registry: https://registry.npmjs.org/
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ format('0.0.0-oidc.{0}.{1}.publish', github.run_id, github.run_attempt) }}
+      tag: oidc-smoke-publish
+
+  dist-tag-add:
+    needs: publish
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: add
+      package: ${{ inputs.package }}
+      registry: https://registry.npmjs.org/
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ format('0.0.0-oidc.{0}.{1}.publish', github.run_id, github.run_attempt) }}
+      tag: oidc-smoke
+
+  dist-tag-list:
+    needs: dist-tag-add
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: list
+      package: ${{ inputs.package }}
+      registry: https://registry.npmjs.org/
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: oidc-smoke
+
+  dist-tag-remove:
+    needs: dist-tag-list
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: remove
+      package: ${{ inputs.package }}
+      registry: https://registry.npmjs.org/
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: oidc-smoke
+
+  stage-publish:
+    needs: dist-tag-remove
+    uses: ./.github/workflows/npm-stage-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      registry: https://registry.npmjs.org/
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ format('0.0.0-oidc.{0}.{1}.stage', github.run_id, github.run_attempt) }}
+      tag: oidc-smoke-stage
+
+  report:
+    if: always()
+    needs:
+      - publish
+      - dist-tag-add
+      - dist-tag-list
+      - dist-tag-remove
+      - stage-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write smoke report
+        env:
+          CLI_REF: ${{ inputs.cli_ref }}
+          DIST_TAG_ADD_RESULT: ${{ needs.dist-tag-add.result }}
+          DIST_TAG_LIST_RESULT: ${{ needs.dist-tag-list.result }}
+          DIST_TAG_REMOVE_RESULT: ${{ needs.dist-tag-remove.result }}
+          PACKAGE_NAME: ${{ inputs.package }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          STAGE_PUBLISH_RESULT: ${{ needs.stage-publish.result }}
+        run: |
+          {
+            echo "## npm OIDC smoke report"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`$PACKAGE_NAME\` |"
+            echo "| npm CLI ref | \`$CLI_REF\` |"
+            echo "| Publish version | \`0.0.0-oidc.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.publish\` |"
+            echo "| Stage version | \`0.0.0-oidc.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.stage\` |"
+            echo
+            echo "| Command | Result |"
+            echo "| --- | --- |"
+            echo "| npm publish | $PUBLISH_RESULT |"
+            echo "| npm dist-tag add | $DIST_TAG_ADD_RESULT |"
+            echo "| npm dist-tag list | $DIST_TAG_LIST_RESULT |"
+            echo "| npm dist-tag remove | $DIST_TAG_REMOVE_RESULT |"
+            echo "| npm stage publish | $STAGE_PUBLISH_RESULT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          results="$PUBLISH_RESULT $DIST_TAG_ADD_RESULT $DIST_TAG_LIST_RESULT $DIST_TAG_REMOVE_RESULT $STAGE_PUBLISH_RESULT"
+          if [ "$results" != "success success success success success" ]; then
+            echo "Smoke test failed: $results" >&2
+            exit 1
+          fi

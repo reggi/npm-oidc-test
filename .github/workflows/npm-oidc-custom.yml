@@ -1,0 +1,170 @@
+name: npm OIDC custom test
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Command or full sequence to run
+        required: true
+        type: choice
+        default: dist-tag-list
+        options:
+          - dist-tag-list
+          - dist-tag-add
+          - dist-tag-remove
+          - publish
+          - stage-publish
+          - smoke
+      package:
+        description: Existing public npm package with this trusted publisher configured
+        required: true
+        type: string
+      expected_npm_user:
+        description: npm username expected in the package maintainer list
+        required: true
+        type: string
+      registry:
+        description: Registry under test
+        required: true
+        type: string
+        default: https://registry.npmjs.org/
+      cli_ref:
+        description: npm/cli branch, tag, or commit SHA
+        required: true
+        type: string
+        default: latest
+      publish_version:
+        description: Unique version for publish, dist-tag-add, or smoke
+        required: false
+        type: string
+      stage_version:
+        description: Unique version for stage-publish or smoke
+        required: false
+        type: string
+      tag:
+        description: Non-latest test dist-tag
+        required: true
+        type: string
+        default: oidc-smoke
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-oidc-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  dist-tag-list:
+    if: inputs.operation == 'dist-tag-list'
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: list
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: ${{ inputs.tag }}
+
+  dist-tag-add:
+    if: inputs.operation == 'dist-tag-add'
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: add
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.publish_version }}
+      tag: ${{ inputs.tag }}
+
+  dist-tag-remove:
+    if: inputs.operation == 'dist-tag-remove'
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: remove
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: ${{ inputs.tag }}
+
+  publish:
+    if: inputs.operation == 'publish'
+    uses: ./.github/workflows/npm-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.publish_version }}
+      tag: ${{ inputs.tag }}
+
+  stage-publish:
+    if: inputs.operation == 'stage-publish'
+    uses: ./.github/workflows/npm-stage-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.stage_version }}
+      tag: ${{ inputs.tag }}
+
+  smoke-publish:
+    if: inputs.operation == 'smoke'
+    uses: ./.github/workflows/npm-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.publish_version }}
+      tag: ${{ format('{0}-publish', inputs.tag) }}
+
+  smoke-dist-tag-add:
+    needs: smoke-publish
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: add
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.publish_version }}
+      tag: ${{ inputs.tag }}
+
+  smoke-dist-tag-list:
+    needs: smoke-dist-tag-add
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: list
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: ${{ inputs.tag }}
+
+  smoke-dist-tag-remove:
+    needs: smoke-dist-tag-list
+    uses: ./.github/workflows/npm-dist-tag.yml
+    with:
+      action: remove
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      tag: ${{ inputs.tag }}
+
+  smoke-stage-publish:
+    needs: smoke-dist-tag-remove
+    uses: ./.github/workflows/npm-stage-publish.yml
+    with:
+      package: ${{ inputs.package }}
+      expected_npm_user: ${{ inputs.expected_npm_user }}
+      registry: ${{ inputs.registry }}
+      cli_ref: ${{ inputs.cli_ref }}
+      version: ${{ inputs.stage_version }}
+      tag: ${{ format('{0}-stage', inputs.tag) }}
+

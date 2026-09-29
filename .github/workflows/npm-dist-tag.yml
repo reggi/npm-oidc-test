@@ -1,0 +1,130 @@
+name: npm dist-tag OIDC test
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: dist-tag operation to run
+        required: true
+        type: choice
+        default: list
+        options:
+          - list
+          - add
+          - remove
+      package:
+        description: Existing public npm package with this trusted publisher configured
+        required: true
+        type: string
+      expected_npm_user:
+        description: npm username expected in the package maintainer list
+        required: true
+        type: string
+      registry:
+        description: Registry under test
+        required: true
+        type: string
+        default: https://registry.npmjs.org/
+      cli_ref:
+        description: npm/cli branch, tag, or commit SHA
+        required: true
+        type: string
+        default: latest
+      version:
+        description: Existing package version required for add
+        required: false
+        type: string
+      tag:
+        description: Non-latest test dist-tag
+        required: true
+        type: string
+        default: oidc-smoke
+  workflow_call:
+    inputs:
+      action:
+        required: true
+        type: string
+      package:
+        required: true
+        type: string
+      expected_npm_user:
+        required: false
+        type: string
+      registry:
+        required: true
+        type: string
+      cli_ref:
+        required: false
+        type: string
+        default: latest
+      version:
+        required: false
+        type: string
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  dist-tag:
+    name: npm dist-tag ${{ inputs.action }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_NPM_USER: ${{ inputs.expected_npm_user }}
+      NPM_CLI: ${{ github.workspace }}/.tmp/npm-cli/bin/npm-cli.js
+      OPERATION: dist-tag-${{ inputs.action }}
+      PACKAGE_NAME: ${{ inputs.package }}
+      PUBLISH_VERSION: ${{ inputs.version }}
+      REGISTRY: ${{ inputs.registry }}
+      STAGE_VERSION: ''
+      TAG: ${{ inputs.tag }}
+
+    steps:
+      - name: Check out smoke test
+        uses: actions/checkout@v6
+
+      - name: Check out npm CLI
+        uses: actions/checkout@v6
+        with:
+          repository: npm/cli
+          ref: ${{ inputs.cli_ref }}
+          path: .tmp/npm-cli
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Validate inputs
+        run: node scripts/validate-inputs.mjs
+
+      - name: Install npm CLI dependencies
+        working-directory: .tmp/npm-cli
+        run: npm ci
+
+      - name: Show CLI under test
+        run: node "$NPM_CLI" --version
+
+      - name: Verify package and npm user
+        if: inputs.expected_npm_user != ''
+        run: |
+          maintainers_file="$RUNNER_TEMP/npm-maintainers.json"
+          node "$NPM_CLI" view "$PACKAGE_NAME" maintainers --json --registry="$REGISTRY" > "$maintainers_file"
+          node scripts/verify-maintainer.mjs "$maintainers_file" "$EXPECTED_NPM_USER"
+
+      - name: List dist-tags
+        if: inputs.action == 'list'
+        run: node "$NPM_CLI" dist-tag list "$PACKAGE_NAME" --registry="$REGISTRY"
+
+      - name: Add dist-tag
+        if: inputs.action == 'add'
+        run: node "$NPM_CLI" dist-tag add "$PACKAGE_NAME@$PUBLISH_VERSION" "$TAG" --registry="$REGISTRY"
+
+      - name: Remove dist-tag
+        if: inputs.action == 'remove'
+        run: node "$NPM_CLI" dist-tag remove "$PACKAGE_NAME" "$TAG" --registry="$REGISTRY"
